@@ -3,7 +3,7 @@ package com.rover.ai.ui.navigation
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Model
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -82,7 +82,7 @@ fun BottomNavigationBar(navController: NavHostController) {
         )
         
         NavigationBarItem(
-            icon = { Icon(Icons.Default.Model, contentDescription = "Models") },
+            icon = { Icon(Icons.Default.Storage, contentDescription = "Models") },
             label = { Text("Models") },
             selected = currentRoute == Screen.Models.route,
             onClick = {
