@@ -2,11 +2,14 @@ package com.rover.ai.ai.vision
 
 import android.content.Context
 import android.graphics.Bitmap
+import com.rover.ai.ai.model.ModelFileStatus
+import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.core.Constants
 import com.rover.ai.core.Logger
 import com.rover.ai.core.ThreadManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,7 +79,8 @@ interface YoloDetector {
 @Singleton
 class YoloDetectorImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val threadManager: ThreadManager
+    private val threadManager: ThreadManager,
+    private val modelRegistry: ModelRegistry
 ) : YoloDetector {
     
     private val tag = Constants.TAG_VISION
@@ -111,10 +115,11 @@ class YoloDetectorImpl @Inject constructor(
      * Initialize YOLO model
      * 
      * In production:
-     * 1. Load YOLOv8n.tflite from assets
-     * 2. Configure GPU delegate
-     * 3. Initialize interpreter
-     * 4. Warm up with dummy input
+     * 1. Check if model file exists in external storage
+     * 2. Load YOLOv8n.tflite from external storage
+     * 3. Configure GPU delegate
+     * 4. Initialize interpreter
+     * 5. Warm up with dummy input
      */
     override suspend fun initialize(): Boolean = withContext(threadManager.visionDispatcher) {
         Logger.d(tag, "Initializing YOLO detector")
@@ -124,18 +129,37 @@ class YoloDetectorImpl @Inject constructor(
             return@withContext true
         }
         
+        // Check if model is available
+        if (!modelRegistry.isModelAvailable(Constants.YOLO_MODEL_FILE)) {
+            Logger.w(tag, "YOLO model not found in external storage - disabling object detection")
+            modelRegistry.updateModelStatus(
+                Constants.YOLO_MODEL_FILE,
+                ModelFileStatus.MISSING,
+                "Model file not found. Please sideload via ADB."
+            )
+            return@withContext false
+        }
+        
         return@withContext try {
             val startTime = System.currentTimeMillis()
             
-            // Stub: Check if model exists
-            val modelExists = checkModelInAssets(Constants.YOLO_MODEL_FILE)
+            // Get model file from external storage
+            val modelFile = modelRegistry.getModelFile(Constants.YOLO_MODEL_FILE)
             
-            if (!modelExists) {
-                Logger.w(tag, "YOLO model not found in assets (stub mode)")
+            if (!modelFile.exists() || !modelFile.canRead()) {
+                Logger.e(tag, "YOLO model file not accessible at ${modelFile.absolutePath}")
+                modelRegistry.updateModelStatus(
+                    Constants.YOLO_MODEL_FILE,
+                    ModelFileStatus.ERROR,
+                    "Model file not accessible"
+                )
+                return@withContext false
             }
             
+            Logger.i(tag, "Loading YOLO from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
+            
             // Stub: In real implementation:
-            // val modelBuffer = loadModelFile(Constants.YOLO_MODEL_FILE)
+            // val modelBuffer = loadModelFile(modelFile)
             // val options = Interpreter.Options().apply {
             //     when (Constants.YOLO_DELEGATE) {
             //         "GPU" -> addDelegate(GpuDelegate())
@@ -148,6 +172,7 @@ class YoloDetectorImpl @Inject constructor(
             val loadTime = System.currentTimeMillis() - startTime
             
             isInitialized = true
+            modelRegistry.updateModelStatus(Constants.YOLO_MODEL_FILE, ModelFileStatus.LOADED)
             
             Logger.i(tag, "YOLO initialized in ${loadTime}ms (stub mode)")
             Logger.perf(tag, "yolo_init", loadTime)
@@ -155,6 +180,11 @@ class YoloDetectorImpl @Inject constructor(
             true
         } catch (e: Exception) {
             Logger.e(tag, "Failed to initialize YOLO", e)
+            modelRegistry.updateModelStatus(
+                Constants.YOLO_MODEL_FILE,
+                ModelFileStatus.ERROR,
+                "Failed to load: ${e.message}"
+            )
             isInitialized = false
             false
         }
@@ -228,17 +258,6 @@ class YoloDetectorImpl @Inject constructor(
             Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
         } else {
             bitmap
-        }
-    }
-    
-    /**
-     * Check if model exists in assets
-     */
-    private fun checkModelInAssets(filename: String): Boolean {
-        return try {
-            context.assets.list("")?.contains(filename) ?: false
-        } catch (e: Exception) {
-            false
         }
     }
     

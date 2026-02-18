@@ -113,9 +113,88 @@ Build a fully autonomous rover using an **iQOO 13 smartphone** (Snapdragon 8 Eli
 - **Target SDK**: 34 (Android 14)
 - **JDK**: 17
 
-### AI Models (not included in repo)
-- **Gemma 3n E2B-it**: Download from [Google AI Edge](https://ai.google.dev/edge)
-- **YOLO Nano TFLite**: Convert from [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
+---
+
+## 🤖 AI Model Setup
+
+The AI models are **NOT** included in the APK due to their size. They must be sideloaded to the device after app installation.
+
+### Required Models
+
+1. **Gemma 3n E2B-it** (~3.7GB)
+   - Download from: [Google AI Edge](https://ai.google.dev/edge/litert/models/gemma)
+   - File: `gemma_3n_e2b_it.tflite`
+   - Purpose: LLM-based scene understanding and planning
+
+2. **YOLOv8 Nano** (~10MB)
+   - Download from: [Ultralytics](https://github.com/ultralytics/ultralytics)
+   - Convert to TFLite: `yolo export model=yolov8n.pt format=tflite`
+   - File: `yolov8n.tflite`
+   - Purpose: Real-time object detection
+
+3. **Depth Anything V2** (~20MB)
+   - Download from: [Depth Anything](https://github.com/DepthAnything/Depth-Anything-V2)
+   - Convert to TFLite (mobile variant)
+   - File: `depth_anything_v2.tflite`
+   - Purpose: Monocular depth estimation
+
+### Model Storage Location
+
+Models must be placed in app-scoped storage (no permissions needed):
+```
+/sdcard/Android/data/com.rover.ai/files/models/
+├── gemma_3n_e2b_it.tflite      # LLM model (~3.7GB)
+├── yolov8n.tflite               # Object detection (~10MB)
+└── depth_anything_v2.tflite     # Depth estimation (~20MB)
+```
+
+### Push Models via ADB
+
+#### Option 1: Using Helper Scripts (Recommended)
+
+**Linux/Mac:**
+```bash
+cd scripts
+./push_models.sh /path/to/your/models/
+```
+
+**Windows:**
+```cmd
+cd scripts
+push_models.bat C:\path\to\your\models\
+```
+
+#### Option 2: Manual ADB Push
+
+1. Connect device via USB and enable USB debugging
+2. Push each model individually:
+
+```bash
+adb push gemma_3n_e2b_it.tflite /sdcard/Android/data/com.rover.ai/files/models/
+adb push yolov8n.tflite /sdcard/Android/data/com.rover.ai/files/models/
+adb push depth_anything_v2.tflite /sdcard/Android/data/com.rover.ai/files/models/
+```
+
+3. Verify models are present:
+```bash
+adb shell ls -lh /sdcard/Android/data/com.rover.ai/files/models/
+```
+
+### Verify in App
+
+1. Open the Rover AI app
+2. Navigate to **Model Status** screen (bottom navigation)
+3. Tap **Refresh Model Status**
+4. All models should show status: **Found** ✅
+
+### Graceful Degradation
+
+The rover is fully functional even without AI models:
+
+- **No Gemma 3n**: LLM-based planning disabled, uses behavior tree only
+- **No YOLO**: Object detection disabled, relies on ultrasonic/IR sensors only
+- **No Depth model**: Depth estimation disabled
+- Basic motor control and reactive behaviors work with zero AI models
 
 ---
 
@@ -146,17 +225,27 @@ cd android
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 3. Push AI Models
+
+After installing the APK, push the AI models:
+
+```bash
+cd scripts
+./push_models.sh /path/to/your/models/
+```
+
+Or use the Windows batch script:
+```cmd
+cd scripts
+push_models.bat C:\path\to\your\models\
+```
+
 **First Launch**:
 1. Phone creates WiFi AP or connects to ESP32 AP "RoverBrain"
 2. App connects to `ws://192.168.4.1:81`
-3. Face animation starts (wake-up sequence)
-4. Sensor data should appear on dashboard
-
-### 3. Place AI Models
-
-Place downloaded models in:
-- `android/app/src/main/assets/gemma_3n_e2b_it.tflite`
-- `android/app/src/main/assets/yolov8n.tflite`
+3. Navigate to **Model Status** screen to verify models
+4. Face animation starts (wake-up sequence)
+5. Sensor data should appear on dashboard
 
 ---
 

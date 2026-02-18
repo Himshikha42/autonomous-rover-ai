@@ -2,9 +2,14 @@ package com.rover.ai.ai.vision
 
 import android.content.Context
 import android.graphics.Bitmap
+import com.rover.ai.ai.model.ModelFileStatus
+import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.core.Constants
 import com.rover.ai.core.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +29,13 @@ import javax.inject.Singleton
  */
 interface DepthEstimator {
     /**
+     * Initialize depth estimation model
+     * 
+     * @return true if successful, false otherwise
+     */
+    suspend fun initialize(): Boolean
+    
+    /**
      * Estimate depth map from RGB image
      * 
      * @param bitmap Input image
@@ -31,6 +43,11 @@ interface DepthEstimator {
      *         Values represent relative depth (0.0 = near, 1.0 = far)
      */
     suspend fun estimateDepth(bitmap: Bitmap): FloatArray?
+    
+    /**
+     * Release resources
+     */
+    suspend fun release()
 }
 
 /**
@@ -43,13 +60,90 @@ interface DepthEstimator {
  */
 @Singleton
 class DepthEstimatorImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val modelRegistry: ModelRegistry
 ) : DepthEstimator {
     
     private val tag = Constants.TAG_VISION
     
-    init {
-        Logger.d(tag, "DepthEstimator initialized (stub mode - not functional)")
+    @Volatile
+    private var isInitialized = false
+    
+    // Stub: Will hold actual TFLite Interpreter
+    // private var interpreter: Interpreter? = null
+    
+    /**
+     * Initialize depth estimation model
+     * 
+     * Loads model from external storage if available.
+     */
+    override suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
+        Logger.d(tag, "Initializing Depth Estimator")
+        
+        if (isInitialized) {
+            Logger.w(tag, "Depth estimator already initialized")
+            return@withContext true
+        }
+        
+        // Check if model is available
+        if (!modelRegistry.isModelAvailable(Constants.DEPTH_MODEL_FILE)) {
+            Logger.w(tag, "Depth model not found in external storage - disabling depth estimation")
+            modelRegistry.updateModelStatus(
+                Constants.DEPTH_MODEL_FILE,
+                ModelFileStatus.MISSING,
+                "Model file not found. Please sideload via ADB."
+            )
+            return@withContext false
+        }
+        
+        return@withContext try {
+            val startTime = System.currentTimeMillis()
+            
+            // Get model file from external storage
+            val modelFile = modelRegistry.getModelFile(Constants.DEPTH_MODEL_FILE)
+            
+            if (!modelFile.exists() || !modelFile.canRead()) {
+                Logger.e(tag, "Depth model file not accessible at ${modelFile.absolutePath}")
+                modelRegistry.updateModelStatus(
+                    Constants.DEPTH_MODEL_FILE,
+                    ModelFileStatus.ERROR,
+                    "Model file not accessible"
+                )
+                return@withContext false
+            }
+            
+            Logger.i(tag, "Loading depth model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
+            
+            // Stub: In real implementation:
+            // val modelBuffer = loadModelFile(modelFile)
+            // val options = Interpreter.Options().apply {
+            //     when (Constants.DEPTH_DELEGATE) {
+            //         "GPU" -> addDelegate(GpuDelegate())
+            //         "NNAPI" -> addDelegate(NnApiDelegate())
+            //     }
+            //     setNumThreads(2)
+            // }
+            // interpreter = Interpreter(modelBuffer, options)
+            
+            val loadTime = System.currentTimeMillis() - startTime
+            
+            isInitialized = true
+            modelRegistry.updateModelStatus(Constants.DEPTH_MODEL_FILE, ModelFileStatus.LOADED)
+            
+            Logger.i(tag, "Depth estimator initialized in ${loadTime}ms (stub mode)")
+            Logger.perf(tag, "depth_init", loadTime)
+            
+            true
+        } catch (e: Exception) {
+            Logger.e(tag, "Failed to initialize depth estimator", e)
+            modelRegistry.updateModelStatus(
+                Constants.DEPTH_MODEL_FILE,
+                ModelFileStatus.ERROR,
+                "Failed to load: ${e.message}"
+            )
+            isInitialized = false
+            false
+        }
     }
     
     /**
@@ -63,6 +157,11 @@ class DepthEstimatorImpl @Inject constructor(
      * 5. Return depth values
      */
     override suspend fun estimateDepth(bitmap: Bitmap): FloatArray? {
+        if (!isInitialized) {
+            Logger.d(tag, "Depth estimation not initialized")
+            return null
+        }
+        
         Logger.d(tag, "Depth estimation not implemented (stub)")
         
         // Future implementation:
@@ -74,6 +173,23 @@ class DepthEstimatorImpl @Inject constructor(
         // return normalized
         
         return null
+    }
+    
+    /**
+     * Release model resources
+     */
+    override suspend fun release() {
+        Logger.d(tag, "Releasing depth estimator resources")
+        
+        try {
+            // Stub: interpreter?.close()
+            // interpreter = null
+            
+            isInitialized = false
+            Logger.i(tag, "Depth estimator resources released")
+        } catch (e: Exception) {
+            Logger.e(tag, "Error releasing depth estimator", e)
+        }
     }
     
     /**
