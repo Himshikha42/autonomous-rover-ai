@@ -1,0 +1,123 @@
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+build/
+.gradle/
+local.properties
+captures/
+.navigation/
+.externalNativeBuild/
+.cxx/
+*.iml
+*.log
+
+# Android Studio
+.idea/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+.idea/.name
+.idea/compiler.xml
+.idea/copyright/
+.idea/encodings.xml
+.idea/misc.xml
+.idea/navEditor.xml
+.idea/runConfigurations.xml
+.idea/scopes/
+.idea/vcs.xml
+*.ipr
+*.iws
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Kotlin
+*.kotlin_module
+
+# Arduino/PlatformIO
+.pio/
+.vscode/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+*.elf
+*.hex
+*.bin
+*.map
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.fuse_hidden*
+
+# Model Files (large binaries not for git)
+*.tflite
+*.bin
+*.gguf
+*.pb
+*.pth
+*.onnx
+*.h5
+*.weights
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+dist/
+*.apk
+*.aab
+*.so
+*.o
+*.a
+
+# Test outputs
+test-results/
+*.test
+*.prof
+coverage/
+
+# IDE
+.vscode/
+*.sublime-*
+.project
+.classpath
+.settings/
+
+# Logs
+*.log
+logs/

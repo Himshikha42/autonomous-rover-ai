@@ -1,0 +1,64 @@
+# Android Build
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Android Studio
+*.iml
+.idea/
+.navigation/
+captures/
+output.json
+*.hprof
+
+# NDK
+obj/
+
+# IntelliJ
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/misc.xml
+.idea/navEditor.xml
+.idea/render.experimental.xml
+.idea/vcs.xml
+.idea/deploymentTargetDropDown.xml
+
+# Keystore
+*.jks
+*.keystore
+
+# Generated files
+bin/
+gen/
+out/
+
+# Log Files
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
