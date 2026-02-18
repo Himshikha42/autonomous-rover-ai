@@ -13,12 +13,25 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.rover.ai.ai.model.ModelRegistry
+import com.rover.ai.communication.ConnectionManager
+import com.rover.ai.core.StateManager
 import com.rover.ai.ui.navigation.RoverNavHost
 import com.rover.ai.ui.theme.RoverTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    @Inject
+    lateinit var stateManager: StateManager
+    
+    @Inject
+    lateinit var connectionManager: ConnectionManager
+    
+    @Inject
+    lateinit var modelRegistry: ModelRegistry
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +49,11 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     SetupSystemUI()
-                    RoverNavHost()
+                    RoverNavHost(
+                        stateManager = stateManager,
+                        connectionManager = connectionManager,
+                        modelRegistry = modelRegistry
+                    )
                 }
             }
         }

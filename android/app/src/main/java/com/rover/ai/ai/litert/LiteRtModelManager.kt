@@ -1,12 +1,17 @@
 package com.rover.ai.ai.litert
 
 import android.content.Context
+import com.rover.ai.ai.model.ModelFileStatus
+import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.core.Constants
 import com.rover.ai.core.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -75,7 +80,8 @@ interface LiteRtModelManager {
  */
 @Singleton
 class LiteRtModelManagerImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val modelRegistry: ModelRegistry
 ) : LiteRtModelManager {
     
     private val tag = Constants.TAG_AI
@@ -89,37 +95,58 @@ class LiteRtModelManagerImpl @Inject constructor(
     // private var interpreter: Interpreter? = null
     
     /**
-     * Load model from assets
+     * Load model from external storage
      * 
      * In production, this will:
-     * 1. Load .tflite file from assets
-     * 2. Configure GPU/NNAPI delegate
-     * 3. Initialize TFLite Interpreter
-     * 4. Warm up with dummy input
+     * 1. Check if model file exists in external storage
+     * 2. Load .tflite file using memory-mapped file for large models
+     * 3. Configure GPU/NNAPI delegate
+     * 4. Initialize TFLite Interpreter
+     * 5. Warm up with dummy input
      */
-    override suspend fun loadModel(): Boolean {
+    override suspend fun loadModel(): Boolean = withContext(Dispatchers.IO) {
         Logger.d(tag, "Loading Gemma 3n model: ${Constants.GEMMA_MODEL_FILE}")
         
         if (_modelStatus.value == ModelStatus.LOADED) {
             Logger.w(tag, "Model already loaded")
-            return true
+            return@withContext true
+        }
+        
+        // Check if model is available
+        if (!modelRegistry.isModelAvailable(Constants.GEMMA_MODEL_FILE)) {
+            Logger.w(tag, "Gemma model not found in external storage - disabling LLM capabilities")
+            _modelStatus.value = ModelStatus.ERROR
+            modelRegistry.updateModelStatus(
+                Constants.GEMMA_MODEL_FILE,
+                ModelFileStatus.MISSING,
+                "Model file not found. Please sideload via ADB."
+            )
+            return@withContext false
         }
         
         _modelStatus.value = ModelStatus.LOADING
         
-        return try {
+        return@withContext try {
             val startTime = System.currentTimeMillis()
             
-            // Stub: Check if model file exists in assets
-            val modelExists = checkModelInAssets(Constants.GEMMA_MODEL_FILE)
+            // Get model file from external storage
+            val modelFile = modelRegistry.getModelFile(Constants.GEMMA_MODEL_FILE)
             
-            if (!modelExists) {
-                Logger.w(tag, "Model file not found in assets (stub mode)")
-                // In stub mode, simulate successful load
+            if (!modelFile.exists() || !modelFile.canRead()) {
+                Logger.e(tag, "Model file not accessible at ${modelFile.absolutePath}")
+                _modelStatus.value = ModelStatus.ERROR
+                modelRegistry.updateModelStatus(
+                    Constants.GEMMA_MODEL_FILE,
+                    ModelFileStatus.ERROR,
+                    "Model file not accessible"
+                )
+                return@withContext false
             }
             
+            Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
+            
             // Stub: In real implementation:
-            // val modelBuffer = loadModelFile(Constants.GEMMA_MODEL_FILE)
+            // val modelBuffer = loadModelFileMemoryMapped(modelFile)
             // val options = Interpreter.Options().apply {
             //     when (Constants.GEMMA_ACCELERATOR) {
             //         "GPU" -> addDelegate(GpuDelegate())
@@ -134,18 +161,24 @@ class LiteRtModelManagerImpl @Inject constructor(
             modelInfo = ModelInfo(
                 name = Constants.GEMMA_MODEL_NAME,
                 version = "1.0-stub",
-                sizeBytes = 0L, // Stub: Will be actual file size
+                sizeBytes = modelFile.length(),
                 accelerator = Constants.GEMMA_ACCELERATOR,
                 loadTimeMs = loadTime
             )
             
             _modelStatus.value = ModelStatus.LOADED
+            modelRegistry.updateModelStatus(Constants.GEMMA_MODEL_FILE, ModelFileStatus.LOADED)
             Logger.i(tag, "Model loaded successfully in ${loadTime}ms (stub mode)")
             
             true
         } catch (e: Exception) {
             Logger.e(tag, "Failed to load model", e)
             _modelStatus.value = ModelStatus.ERROR
+            modelRegistry.updateModelStatus(
+                Constants.GEMMA_MODEL_FILE,
+                ModelFileStatus.ERROR,
+                "Failed to load: ${e.message}"
+            )
             modelInfo = null
             false
         }
@@ -178,17 +211,5 @@ class LiteRtModelManagerImpl @Inject constructor(
     
     override fun getModelInfo(): ModelInfo? {
         return modelInfo
-    }
-    
-    /**
-     * Check if model file exists in assets
-     */
-    private fun checkModelInAssets(filename: String): Boolean {
-        return try {
-            context.assets.list("")?.contains(filename) ?: false
-        } catch (e: Exception) {
-            Logger.w(tag, "Error checking assets: ${e.message}")
-            false
-        }
     }
 }
