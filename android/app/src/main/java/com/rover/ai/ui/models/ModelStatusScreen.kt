@@ -261,7 +261,7 @@ private fun ModelStatusCard(
                         text = formatSize(modelInfo.actualSizeBytes),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (modelInfo.actualSizeBytes < modelInfo.metadata.expectedSizeBytes * 0.9) {
+                        color = if (modelInfo.actualSizeBytes < modelInfo.metadata.expectedSizeBytes * Constants.MODEL_SIZE_TOLERANCE_FACTOR) {
                             Color(0xFFFF9800)
                         } else {
                             MaterialTheme.colorScheme.onSurface
@@ -409,6 +409,9 @@ private fun HelpSection() {
 
 /**
  * Format file size in human-readable format
+ * 
+ * Uses decimal units (1000-based) consistent with modern storage conventions
+ * and how Android reports file sizes.
  */
 private fun formatSize(bytes: Long): String {
     return when {

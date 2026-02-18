@@ -155,7 +155,7 @@ class ModelRegistry @Inject constructor(
                     val actualSize = file.length()
                     
                     // Log size mismatch warning
-                    if (actualSize < metadata.expectedSizeBytes * 0.9) {
+                    if (actualSize < metadata.expectedSizeBytes * Constants.MODEL_SIZE_TOLERANCE_FACTOR) {
                         Logger.w(
                             tag,
                             "${metadata.name}: File size ${actualSize / 1_000_000}MB is smaller than expected ${metadata.expectedSizeBytes / 1_000_000}MB"
