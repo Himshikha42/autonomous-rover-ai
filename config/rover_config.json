@@ -1,0 +1,47 @@
+{
+  "gemma": {
+    "model": "Gemma-3n-E2B-it",
+    "accelerator": "GPU",
+    "max_tokens": 128,
+    "topK": 16,
+    "topP": 0.80,
+    "temperature": 0.10,
+    "inference_interval_ms": 5000,
+    "image_input_resolution": 256
+  },
+  "safety": {
+    "obstacle_stop_cm": 15,
+    "obstacle_slow_cm": 40,
+    "motor_timeout_ms": 2000,
+    "heartbeat_interval_ms": 500,
+    "min_emotion_duration_ms": 3000,
+    "watchdog_timeout_ms": 5000
+  },
+  "yolo": {
+    "model": "yolov8n",
+    "delegate": "GPU",
+    "confidence_threshold": 0.5,
+    "target_fps": 12,
+    "input_size": 320
+  },
+  "motors": {
+    "default_speed": 180,
+    "max_speed": 255,
+    "slow_factor": 0.4,
+    "turn_speed_ratio": 0.5
+  },
+  "personality": {
+    "initial_curiosity": 0.5,
+    "initial_sociability": 0.5,
+    "initial_confidence": 0.3,
+    "initial_energy": 0.7,
+    "initial_playfulness": 0.5
+  },
+  "face": {
+    "blink_interval_min_ms": 3000,
+    "blink_interval_max_ms": 7000,
+    "blink_duration_ms": 150,
+    "emotion_transition_ms": 800,
+    "particle_count": 20
+  }
+}
