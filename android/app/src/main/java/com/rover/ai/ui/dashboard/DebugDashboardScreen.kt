@@ -63,6 +63,13 @@ fun DebugDashboardScreen(
             )
         }
         
+        // Disconnected banner
+        if (roverState.connectionState == StateManager.ConnectionState.DISCONNECTED) {
+            item {
+                DisconnectedBanner()
+            }
+        }
+        
         // Connection Status
         item {
             ConnectionStatusSection(roverState.connectionState)
@@ -147,6 +154,45 @@ fun DebugDashboardScreen(
                     stateManager.clearError()
                 }
             }
+        }
+    }
+}
+
+/**
+ * Prominent warning banner shown when the ESP32 is not connected.
+ */
+@Composable
+private fun DisconnectedBanner() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFF9800).copy(alpha = 0.15f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "⚡ ESP32: Not Connected",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF9800)
+            )
+            Text(
+                text = "WebSocket address: ${Constants.WS_URL}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFFF9800)
+            )
+            Text(
+                text = "Connect ESP32 to same WiFi network (${Constants.ESP32_SSID})",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFFF9800)
+            )
         }
     }
 }
