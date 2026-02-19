@@ -7,12 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.communication.ConnectionManager
 import com.rover.ai.core.StateManager
@@ -48,33 +44,12 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SetupSystemUI()
                     RoverNavHost(
                         stateManager = stateManager,
                         connectionManager = connectionManager,
                         modelRegistry = modelRegistry
                     )
                 }
-            }
-        }
-    }
-    
-    @Composable
-    private fun SetupSystemUI() {
-        DisposableEffect(Unit) {
-            val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-            
-            windowInsetsController.apply {
-                // Hide system bars for immersive experience
-                hide(WindowInsetsCompat.Type.systemBars())
-                
-                // Configure behavior when swiping from edges
-                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-            
-            onDispose {
-                // Restore system bars when activity is disposed
-                windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
             }
         }
     }

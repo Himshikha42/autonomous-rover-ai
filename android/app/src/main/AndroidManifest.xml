@@ -42,7 +42,7 @@
             android:exported="true"
             android:theme="@style/Theme.AutonomousRoverAI"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:screenOrientation="landscape">
+            android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

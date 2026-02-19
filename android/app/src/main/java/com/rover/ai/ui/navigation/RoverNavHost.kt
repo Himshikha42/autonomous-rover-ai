@@ -1,13 +1,18 @@
 package com.rover.ai.ui.navigation
 
+import android.app.Activity
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -15,8 +20,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.communication.ConnectionManager
+import com.rover.ai.core.Constants
+import com.rover.ai.core.Logger
 import com.rover.ai.core.StateManager
 import com.rover.ai.ui.dashboard.DebugDashboardScreen
+import com.rover.ai.ui.face.EmotionFaceScreen
 import com.rover.ai.ui.models.ModelStatusScreen
 
 sealed class Screen(val route: String, val title: String) {
@@ -33,28 +41,61 @@ fun RoverNavHost(
     modelRegistry: ModelRegistry
 ) {
     val navController = rememberNavController()
-    
-    Scaffold(
-        bottomBar = {
-            BottomNavigationBar(navController)
+    var isImmersive by remember { mutableStateOf(false) }
+
+    val view = LocalView.current
+    LaunchedEffect(isImmersive) {
+        val window = (view.context as? Activity)?.window
+        if (window == null) {
+            Logger.w(Constants.TAG_UI, "Cannot toggle immersive mode: view not attached to an Activity")
+            return@LaunchedEffect
         }
-    ) { paddingValues ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Dashboard.route,
-            modifier = modifier.padding(paddingValues)
-        ) {
-            composable(Screen.Dashboard.route) {
-                DebugDashboardScreen(
-                    stateManager = stateManager,
-                    connectionManager = connectionManager
-                )
+        val controller = WindowCompat.getInsetsController(window, view)
+        if (isImmersive) {
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    if (isImmersive) {
+        EmotionFaceScreen(
+            stateManager = stateManager,
+            onExitImmersive = { isImmersive = false }
+        )
+    } else {
+        Scaffold(
+            bottomBar = {
+                BottomNavigationBar(navController)
+            },
+            floatingActionButton = {
+                FloatingActionButton(onClick = { isImmersive = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Fullscreen,
+                        contentDescription = "Enter Immersive / Face Display Mode"
+                    )
+                }
             }
-            
-            composable(Screen.Models.route) {
-                ModelStatusScreen(
-                    modelRegistry = modelRegistry
-                )
+        ) { paddingValues ->
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Dashboard.route,
+                modifier = modifier.padding(paddingValues)
+            ) {
+                composable(Screen.Dashboard.route) {
+                    DebugDashboardScreen(
+                        stateManager = stateManager,
+                        connectionManager = connectionManager
+                    )
+                }
+
+                composable(Screen.Models.route) {
+                    ModelStatusScreen(
+                        modelRegistry = modelRegistry
+                    )
+                }
             }
         }
     }
