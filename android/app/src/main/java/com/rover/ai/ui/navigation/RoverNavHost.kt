@@ -113,7 +113,8 @@ fun RoverNavHost(
                         modelManager = modelManager,
                         inferenceSession = inferenceSession,
                         yoloDetector = yoloDetector,
-                        depthEstimator = depthEstimator
+                        depthEstimator = depthEstimator,
+                        modelRegistry = modelRegistry
                     )
                 }
             }
