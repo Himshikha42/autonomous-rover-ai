@@ -95,6 +95,10 @@ class YoloDetectorImpl @Inject constructor(
     private var isInitialized = false
     
     private var interpreter: Interpreter? = null
+
+    // Actual input size queried from the model at runtime.
+    // YOLO_INPUT_SIZE is used as a fallback default only.
+    private var actualInputSize: Int = Constants.YOLO_INPUT_SIZE
     
     // COCO dataset labels (80 classes)
     private val labels = listOf(
@@ -167,8 +171,28 @@ class YoloDetectorImpl @Inject constructor(
             val options = Interpreter.Options().apply {
                 numThreads = 2
             }
-            interpreter = Interpreter(modelBuffer, options)
-            
+            try {
+                interpreter = Interpreter(modelBuffer, options)
+            } catch (e: IllegalArgumentException) {
+                Logger.e(tag, "YOLO model file is not a valid TFLite model. " +
+                    "Please re-export using: yolo export model=yolov8n.pt format=tflite", e)
+                modelRegistry.updateModelStatus(
+                    Constants.YOLO_MODEL_FILE,
+                    ModelFileStatus.ERROR,
+                    "Invalid TFLite model. Re-export with: yolo export model=yolov8n.pt format=tflite"
+                )
+                return@withContext false
+            }
+
+            // Query actual input size from model to avoid tensor size mismatch
+            val inputShape = interpreter!!.getInputTensor(0).shape() // e.g., [1, 640, 640, 3]
+            if (inputShape[1] != inputShape[2]) {
+                Logger.w(tag, "YOLO model has non-square input (${inputShape[1]}x${inputShape[2]}); using height as input size")
+            }
+            actualInputSize = inputShape[1] // assuming square input; log warning if not
+            Logger.i(tag, "YOLO input shape: ${inputShape.contentToString()} (${actualInputSize}x${actualInputSize})")
+            Logger.i(tag, "YOLO output shape: ${interpreter!!.getOutputTensor(0).shape().contentToString()}")
+
             val loadTime = System.currentTimeMillis() - startTime
             
             isInitialized = true
@@ -255,13 +279,11 @@ class YoloDetectorImpl @Inject constructor(
     /**
      * Preprocess image for YOLO input
      *
-     * Resize to model input size (320x320 for Nano)
+     * Resize to model input size (queried from model at runtime)
      */
     private fun preprocessImage(bitmap: Bitmap): Bitmap {
-        val inputSize = Constants.YOLO_INPUT_SIZE
-        
-        return if (bitmap.width != inputSize || bitmap.height != inputSize) {
-            Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+        return if (bitmap.width != actualInputSize || bitmap.height != actualInputSize) {
+            Bitmap.createScaledBitmap(bitmap, actualInputSize, actualInputSize, true)
         } else {
             bitmap
         }
@@ -271,12 +293,11 @@ class YoloDetectorImpl @Inject constructor(
      * Convert bitmap to a normalized float ByteBuffer for TFLite input (NHWC).
      */
     private fun bitmapToBuffer(bitmap: Bitmap): ByteBuffer {
-        val inputSize = Constants.YOLO_INPUT_SIZE
-        val buffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
+        val buffer = ByteBuffer.allocateDirect(1 * actualInputSize * actualInputSize * 3 * 4)
         buffer.order(ByteOrder.nativeOrder())
 
-        val pixels = IntArray(inputSize * inputSize)
-        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        val pixels = IntArray(actualInputSize * actualInputSize)
+        bitmap.getPixels(pixels, 0, actualInputSize, 0, 0, actualInputSize, actualInputSize)
 
         for (pixel in pixels) {
             buffer.putFloat((pixel shr 16 and 0xFF) / 255.0f)  // R
@@ -311,7 +332,7 @@ class YoloDetectorImpl @Inject constructor(
     ): List<Detection> {
         val detections = mutableListOf<Detection>()
         val numClasses = numFeatures - 4
-        val inputSize = Constants.YOLO_INPUT_SIZE.toFloat()
+        val inputSize = actualInputSize.toFloat()
 
         for (i in 0 until numBoxes) {
             var bestClass = 0

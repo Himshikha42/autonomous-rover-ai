@@ -71,7 +71,7 @@ object Constants {
     const val YOLO_DELEGATE = "GPU"
     const val YOLO_CONFIDENCE_THRESHOLD = 0.5f
     const val YOLO_TARGET_FPS = 12
-    const val YOLO_INPUT_SIZE = 320
+    const val YOLO_INPUT_SIZE = 320 // Fallback default; actual size is queried from the model at runtime
     const val YOLO_IOU_THRESHOLD = 0.45f
     
     // ============================================================================
@@ -80,7 +80,7 @@ object Constants {
     
     const val DEPTH_MODEL_FILE = "Depth-Anything-V2.tflite"
     const val DEPTH_DELEGATE = "GPU"
-    const val DEPTH_INPUT_SIZE = 256
+    const val DEPTH_INPUT_SIZE = 256 // Fallback default; actual size is queried from the model at runtime
     
     // ============================================================================
     // MODEL REGISTRY

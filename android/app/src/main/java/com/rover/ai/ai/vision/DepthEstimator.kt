@@ -76,6 +76,11 @@ class DepthEstimatorImpl @Inject constructor(
     private var isInitialized = false
     
     private var interpreter: Interpreter? = null
+
+    // Actual input dimensions queried from the model at runtime.
+    // DEPTH_INPUT_SIZE is used as a fallback default only.
+    private var actualInputWidth: Int = Constants.DEPTH_INPUT_SIZE
+    private var actualInputHeight: Int = Constants.DEPTH_INPUT_SIZE
     
     /**
      * Initialize depth estimation model
@@ -124,9 +129,16 @@ class DepthEstimatorImpl @Inject constructor(
                 numThreads = 2
             }
             interpreter = Interpreter(modelBuffer, options)
-            
+
+            // Query actual input dimensions from model to avoid tensor size mismatch
+            val inputTensor = interpreter!!.getInputTensor(0)
+            val inputShape = inputTensor.shape() // e.g., [1, 518, 518, 3]
+            actualInputHeight = inputShape[1]
+            actualInputWidth = inputShape[2]
+            Logger.i(tag, "Depth model input shape: ${inputShape.contentToString()} (${actualInputHeight}x${actualInputWidth})")
+
             val loadTime = System.currentTimeMillis() - startTime
-            
+
             isInitialized = true
             modelRegistry.updateModelStatus(Constants.DEPTH_MODEL_FILE, ModelFileStatus.LOADED)
             
@@ -160,15 +172,14 @@ class DepthEstimatorImpl @Inject constructor(
 
         return@withContext try {
             val startTime = System.currentTimeMillis()
-            val inputSize = Constants.DEPTH_INPUT_SIZE
 
-            val resized = if (bitmap.width != inputSize || bitmap.height != inputSize) {
-                Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+            val resized = if (bitmap.width != actualInputWidth || bitmap.height != actualInputHeight) {
+                Bitmap.createScaledBitmap(bitmap, actualInputWidth, actualInputHeight, true)
             } else {
                 bitmap
             }
 
-            val inputBuffer = bitmapToBuffer(resized, inputSize)
+            val inputBuffer = bitmapToBuffer(resized, actualInputWidth, actualInputHeight)
 
             val interp = interpreter ?: return@withContext null
             val outputShape = interp.getOutputTensor(0).shape()
@@ -221,12 +232,12 @@ class DepthEstimatorImpl @Inject constructor(
     /**
      * Convert a bitmap to a normalized float ByteBuffer (NHWC).
      */
-    private fun bitmapToBuffer(bitmap: Bitmap, inputSize: Int): ByteBuffer {
-        val buffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
+    private fun bitmapToBuffer(bitmap: Bitmap, width: Int, height: Int): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(1 * width * height * 3 * 4)
         buffer.order(ByteOrder.nativeOrder())
 
-        val pixels = IntArray(inputSize * inputSize)
-        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
         for (pixel in pixels) {
             buffer.putFloat((pixel shr 16 and 0xFF) / 255.0f)  // R
