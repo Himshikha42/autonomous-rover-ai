@@ -9,7 +9,13 @@ import com.rover.ai.core.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.tensorflow.lite.Interpreter
 import java.io.File
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -69,8 +75,7 @@ class DepthEstimatorImpl @Inject constructor(
     @Volatile
     private var isInitialized = false
     
-    // Stub: Will hold actual TFLite Interpreter
-    // private var interpreter: Interpreter? = null
+    private var interpreter: Interpreter? = null
     
     /**
      * Initialize depth estimation model
@@ -114,16 +119,11 @@ class DepthEstimatorImpl @Inject constructor(
             
             Logger.i(tag, "Loading depth model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
             
-            // Stub: In real implementation:
-            // val modelBuffer = loadModelFile(modelFile)
-            // val options = Interpreter.Options().apply {
-            //     when (Constants.DEPTH_DELEGATE) {
-            //         "GPU" -> addDelegate(GpuDelegate())
-            //         "NNAPI" -> addDelegate(NnApiDelegate())
-            //     }
-            //     setNumThreads(2)
-            // }
-            // interpreter = Interpreter(modelBuffer, options)
+            val modelBuffer = loadModelBuffer(modelFile)
+            val options = Interpreter.Options().apply {
+                numThreads = 2
+            }
+            interpreter = Interpreter(modelBuffer, options)
             
             val loadTime = System.currentTimeMillis() - startTime
             
@@ -147,32 +147,42 @@ class DepthEstimatorImpl @Inject constructor(
     }
     
     /**
-     * Stub: Always returns null
-     * 
-     * When implemented, this will:
-     * 1. Load depth estimation model (e.g., MiDaS small)
-     * 2. Preprocess image to model input size
-     * 3. Run inference with GPU acceleration
-     * 4. Post-process depth map to normalized FloatArray
-     * 5. Return depth values
+     * Estimate depth map from RGB image using Depth Anything V2.
+     *
+     * Returns a FloatArray of size (inputSize * inputSize) representing
+     * relative depth values, or null if not available.
      */
-    override suspend fun estimateDepth(bitmap: Bitmap): FloatArray? {
+    override suspend fun estimateDepth(bitmap: Bitmap): FloatArray? = withContext(Dispatchers.IO) {
         if (!isInitialized) {
             Logger.d(tag, "Depth estimation not initialized")
-            return null
+            return@withContext null
         }
-        
-        Logger.d(tag, "Depth estimation not implemented (stub)")
-        
-        // Future implementation:
-        // val startTime = System.currentTimeMillis()
-        // val preprocessed = preprocessImage(bitmap)
-        // val depthMap = runDepthInference(preprocessed)
-        // val normalized = normalizeDepth(depthMap)
-        // Logger.perf(tag, "depth_estimation", System.currentTimeMillis() - startTime)
-        // return normalized
-        
-        return null
+
+        return@withContext try {
+            val startTime = System.currentTimeMillis()
+            val inputSize = Constants.DEPTH_INPUT_SIZE
+
+            val resized = if (bitmap.width != inputSize || bitmap.height != inputSize) {
+                Bitmap.createScaledBitmap(bitmap, inputSize, inputSize, true)
+            } else {
+                bitmap
+            }
+
+            val inputBuffer = bitmapToBuffer(resized, inputSize)
+
+            val interp = interpreter ?: return@withContext null
+            val outputShape = interp.getOutputTensor(0).shape()
+            val outputSize = outputShape.fold(1) { acc, dim -> acc * dim }
+            val output = FloatArray(outputSize)
+
+            interp.run(inputBuffer, output)
+
+            Logger.perf(tag, "depth_estimation", System.currentTimeMillis() - startTime)
+            output
+        } catch (e: Exception) {
+            Logger.e(tag, "Depth estimation failed", e)
+            null
+        }
     }
     
     /**
@@ -182,8 +192,8 @@ class DepthEstimatorImpl @Inject constructor(
         Logger.d(tag, "Releasing depth estimator resources")
         
         try {
-            // Stub: interpreter?.close()
-            // interpreter = null
+            interpreter?.close()
+            interpreter = null
             
             isInitialized = false
             Logger.i(tag, "Depth estimator resources released")
@@ -194,19 +204,47 @@ class DepthEstimatorImpl @Inject constructor(
     
     /**
      * Check if depth estimation is available
-     * 
-     * @return false (stub mode)
      */
     fun isAvailable(): Boolean {
-        return false
+        return isInitialized
     }
     
     /**
      * Get depth estimation model info
-     * 
-     * @return null (not loaded)
+     *
+     * @return description string if loaded, null otherwise
      */
     fun getModelInfo(): String? {
-        return null
+        return if (isInitialized) Constants.DEPTH_MODEL_FILE else null
+    }
+
+    /**
+     * Convert a bitmap to a normalized float ByteBuffer (NHWC).
+     */
+    private fun bitmapToBuffer(bitmap: Bitmap, inputSize: Int): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
+        buffer.order(ByteOrder.nativeOrder())
+
+        val pixels = IntArray(inputSize * inputSize)
+        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+
+        for (pixel in pixels) {
+            buffer.putFloat((pixel shr 16 and 0xFF) / 255.0f)  // R
+            buffer.putFloat((pixel shr 8 and 0xFF) / 255.0f)   // G
+            buffer.putFloat((pixel and 0xFF) / 255.0f)          // B
+        }
+
+        buffer.rewind()
+        return buffer
+    }
+
+    /**
+     * Load model file into a MappedByteBuffer for TFLite.
+     */
+    private fun loadModelBuffer(modelFile: File): MappedByteBuffer {
+        return FileInputStream(modelFile).use { inputStream ->
+            val fileChannel = inputStream.channel
+            fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileChannel.size())
+        }
     }
 }

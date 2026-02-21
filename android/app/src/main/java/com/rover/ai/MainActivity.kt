@@ -9,7 +9,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import com.rover.ai.ai.litert.InferenceSession
+import com.rover.ai.ai.litert.LiteRtModelManager
 import com.rover.ai.ai.model.ModelRegistry
+import com.rover.ai.ai.vision.DepthEstimator
+import com.rover.ai.ai.vision.YoloDetector
 import com.rover.ai.communication.ConnectionManager
 import com.rover.ai.core.StateManager
 import com.rover.ai.ui.navigation.RoverNavHost
@@ -28,6 +32,18 @@ class MainActivity : ComponentActivity() {
     
     @Inject
     lateinit var modelRegistry: ModelRegistry
+
+    @Inject
+    lateinit var modelManager: LiteRtModelManager
+
+    @Inject
+    lateinit var inferenceSession: InferenceSession
+
+    @Inject
+    lateinit var yoloDetector: YoloDetector
+
+    @Inject
+    lateinit var depthEstimator: DepthEstimator
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +63,11 @@ class MainActivity : ComponentActivity() {
                     RoverNavHost(
                         stateManager = stateManager,
                         connectionManager = connectionManager,
-                        modelRegistry = modelRegistry
+                        modelRegistry = modelRegistry,
+                        modelManager = modelManager,
+                        inferenceSession = inferenceSession,
+                        yoloDetector = yoloDetector,
+                        depthEstimator = depthEstimator
                     )
                 }
             }

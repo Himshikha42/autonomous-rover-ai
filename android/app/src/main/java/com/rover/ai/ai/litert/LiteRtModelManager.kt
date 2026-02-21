@@ -1,6 +1,8 @@
 package com.rover.ai.ai.litert
 
 import android.content.Context
+import com.google.ai.edge.litertlm.LlmInference
+import com.google.ai.edge.litertlm.LlmInferenceOptions
 import com.rover.ai.ai.model.ModelFileStatus
 import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.core.Constants
@@ -68,6 +70,15 @@ interface LiteRtModelManager {
      * @return ModelInfo if loaded, null otherwise
      */
     fun getModelInfo(): ModelInfo?
+
+    /**
+     * Generate a text response from the loaded LLM
+     *
+     * @param prompt Input text prompt
+     * @return Generated response string
+     * @throws IllegalStateException if model is not loaded
+     */
+    suspend fun generateResponse(prompt: String): String
 }
 
 /**
@@ -93,10 +104,7 @@ class LiteRtModelManagerImpl @Inject constructor(
     
     private var modelInfo: ModelInfo? = null
     
-    // Holds the LlmInference instance for the Gemma .litertlm model
-    // import com.google.ai.edge.litertlm.LlmInference
-    // import com.google.ai.edge.litertlm.LlmInferenceOptions
-    // private var llmInference: LlmInference? = null
+    private var llmInference: LlmInference? = null
     
     /**
      * Load model from external storage using LlmInference API
@@ -148,20 +156,19 @@ class LiteRtModelManagerImpl @Inject constructor(
             
             Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
             
-            // Load .litertlm model using the LlmInference API:
-            // val options = LlmInferenceOptions.builder()
-            //     .setModelPath(modelFile.absolutePath)
-            //     .setMaxTokens(Constants.GEMMA_MAX_TOKENS)
-            //     .setTopK(Constants.GEMMA_TOP_K.toInt())
-            //     .setTemperature(Constants.GEMMA_TEMPERATURE)
-            //     .build()
-            // llmInference = LlmInference.createFromOptions(context, options)
+            val options = LlmInferenceOptions.builder()
+                .setModelPath(modelFile.absolutePath)
+                .setMaxTokens(Constants.GEMMA_MAX_TOKENS)
+                .setTopK(Constants.GEMMA_TOP_K.toInt())
+                .setTemperature(Constants.GEMMA_TEMPERATURE)
+                .build()
+            llmInference = LlmInference.createFromOptions(context, options)
             
             val loadTime = System.currentTimeMillis() - startTime
             
             modelInfo = ModelInfo(
                 name = Constants.GEMMA_MODEL_NAME,
-                version = "1.0-stub",
+                version = "1.0",
                 sizeBytes = modelFile.length(),
                 accelerator = Constants.GEMMA_ACCELERATOR,
                 loadTimeMs = loadTime
@@ -169,7 +176,7 @@ class LiteRtModelManagerImpl @Inject constructor(
             
             _modelStatus.value = ModelStatus.LOADED
             modelRegistry.updateModelStatus(Constants.GEMMA_MODEL_FILE, ModelFileStatus.LOADED)
-            Logger.i(tag, "Model loaded successfully in ${loadTime}ms (stub mode)")
+            Logger.i(tag, "Model loaded successfully in ${loadTime}ms")
             
             true
         } catch (e: Exception) {
@@ -192,8 +199,8 @@ class LiteRtModelManagerImpl @Inject constructor(
         Logger.d(tag, "Unloading model")
         
         try {
-            // llmInference?.close()
-            // llmInference = null
+            llmInference?.close()
+            llmInference = null
             
             modelInfo = null
             _modelStatus.value = ModelStatus.UNLOADED
@@ -211,5 +218,18 @@ class LiteRtModelManagerImpl @Inject constructor(
     
     override fun getModelInfo(): ModelInfo? {
         return modelInfo
+    }
+
+    /**
+     * Generate a text response from the loaded Gemma LLM
+     */
+    override suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
+        val inference = llmInference
+            ?: throw IllegalStateException("Model not loaded")
+        Logger.d(tag, "Generating response for prompt (${prompt.length} chars)")
+        val startTime = System.currentTimeMillis()
+        val response = inference.generateResponse(prompt)
+        Logger.perf(tag, "llm_inference", System.currentTimeMillis() - startTime)
+        response
     }
 }

@@ -9,7 +9,13 @@ import com.rover.ai.core.Logger
 import com.rover.ai.core.ThreadManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.withContext
+import org.tensorflow.lite.Interpreter
 import java.io.File
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -88,8 +94,7 @@ class YoloDetectorImpl @Inject constructor(
     @Volatile
     private var isInitialized = false
     
-    // Stub: Will hold actual TFLite Interpreter
-    // private var interpreter: Interpreter? = null
+    private var interpreter: Interpreter? = null
     
     // COCO dataset labels (80 classes)
     private val labels = listOf(
@@ -158,16 +163,11 @@ class YoloDetectorImpl @Inject constructor(
             
             Logger.i(tag, "Loading YOLO from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
             
-            // Stub: In real implementation:
-            // val modelBuffer = loadModelFile(modelFile)
-            // val options = Interpreter.Options().apply {
-            //     when (Constants.YOLO_DELEGATE) {
-            //         "GPU" -> addDelegate(GpuDelegate())
-            //         "NNAPI" -> addDelegate(NnApiDelegate())
-            //     }
-            //     setNumThreads(2)
-            // }
-            // interpreter = Interpreter(modelBuffer, options)
+            val modelBuffer = loadModelBuffer(modelFile)
+            val options = Interpreter.Options().apply {
+                numThreads = 2
+            }
+            interpreter = Interpreter(modelBuffer, options)
             
             val loadTime = System.currentTimeMillis() - startTime
             
@@ -206,23 +206,29 @@ class YoloDetectorImpl @Inject constructor(
         return@withContext try {
             val startTime = System.currentTimeMillis()
             
-            // Stub: Preprocess image
             val preprocessed = preprocessImage(bitmap)
+            val inputBuffer = bitmapToBuffer(preprocessed)
+
+            val interp = interpreter ?: return@withContext emptyList<Detection>()
+
+            // Determine output shape from model
+            val outputShape = interp.getOutputTensor(0).shape()
+            // YOLOv8 TFLite output: [1, numFeatures, numBoxes] where numFeatures = 4 + numClasses
+            val numFeatures = outputShape[1]
+            val numBoxes = outputShape[2]
+            val output = Array(1) { Array(numFeatures) { FloatArray(numBoxes) } }
             
-            // Stub: Run inference
-            // val outputs = Array(1) { Array(25200) { FloatArray(85) } }
-            // interpreter.run(inputBuffer, outputs)
-            // val detections = postProcess(outputs)
+            interp.run(inputBuffer, output)
             
-            // Stub: Generate fake detections for testing
-            val detections = generateStubDetections()
+            val detections = postProcess(output, numFeatures, numBoxes)
+            val filtered = nonMaxSuppression(detections)
             
             val inferenceTime = System.currentTimeMillis() - startTime
             
-            Logger.d(tag, "YOLO detected ${detections.size} objects in ${inferenceTime}ms")
+            Logger.d(tag, "YOLO detected ${filtered.size} objects in ${inferenceTime}ms")
             Logger.perf(tag, "yolo_inference", inferenceTime)
             
-            detections
+            filtered
         } catch (e: Exception) {
             Logger.e(tag, "YOLO detection failed", e)
             emptyList()
@@ -236,8 +242,8 @@ class YoloDetectorImpl @Inject constructor(
         Logger.d(tag, "Releasing YOLO resources")
         
         try {
-            // Stub: interpreter?.close()
-            // interpreter = null
+            interpreter?.close()
+            interpreter = null
             
             isInitialized = false
             Logger.i(tag, "YOLO resources released")
@@ -248,7 +254,7 @@ class YoloDetectorImpl @Inject constructor(
     
     /**
      * Preprocess image for YOLO input
-     * 
+     *
      * Resize to model input size (320x320 for Nano)
      */
     private fun preprocessImage(bitmap: Bitmap): Bitmap {
@@ -260,32 +266,87 @@ class YoloDetectorImpl @Inject constructor(
             bitmap
         }
     }
-    
+
     /**
-     * Generate stub detections for testing
-     * 
-     * Simulates finding a person and a chair in the scene.
+     * Convert bitmap to a normalized float ByteBuffer for TFLite input (NHWC).
      */
-    private fun generateStubDetections(): List<Detection> {
-        // Randomly decide if we detect anything (50% chance)
-        if (Math.random() < 0.5) {
-            return emptyList()
+    private fun bitmapToBuffer(bitmap: Bitmap): ByteBuffer {
+        val inputSize = Constants.YOLO_INPUT_SIZE
+        val buffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
+        buffer.order(ByteOrder.nativeOrder())
+
+        val pixels = IntArray(inputSize * inputSize)
+        bitmap.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+
+        for (pixel in pixels) {
+            buffer.putFloat((pixel shr 16 and 0xFF) / 255.0f)  // R
+            buffer.putFloat((pixel shr 8 and 0xFF) / 255.0f)   // G
+            buffer.putFloat((pixel and 0xFF) / 255.0f)          // B
         }
-        
-        return listOf(
-            Detection(
-                label = "person",
-                confidence = 0.85f,
-                bbox = BoundingBox(
-                    x = 0.3f,
-                    y = 0.2f,
-                    width = 0.4f,
-                    height = 0.6f
-                )
-            )
-        )
+
+        buffer.rewind()
+        return buffer
     }
-    
+
+    /**
+     * Load model file into a MappedByteBuffer for TFLite.
+     */
+    private fun loadModelBuffer(modelFile: File): MappedByteBuffer {
+        return FileInputStream(modelFile).use { inputStream ->
+            val fileChannel = inputStream.channel
+            fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileChannel.size())
+        }
+    }
+
+    /**
+     * Post-process YOLOv8 TFLite output tensor.
+     *
+     * Expected output shape: [1, numFeatures, numBoxes]
+     * where numFeatures = 4 (cx, cy, w, h) + numClasses
+     */
+    private fun postProcess(
+        output: Array<Array<FloatArray>>,
+        numFeatures: Int,
+        numBoxes: Int
+    ): List<Detection> {
+        val detections = mutableListOf<Detection>()
+        val numClasses = numFeatures - 4
+        val inputSize = Constants.YOLO_INPUT_SIZE.toFloat()
+
+        for (i in 0 until numBoxes) {
+            var bestClass = 0
+            var bestScore = 0f
+            for (c in 0 until numClasses) {
+                val score = output[0][4 + c][i]
+                if (score > bestScore) {
+                    bestScore = score
+                    bestClass = c
+                }
+            }
+
+            if (bestScore >= Constants.YOLO_CONFIDENCE_THRESHOLD && bestClass < labels.size) {
+                val cx = output[0][0][i]
+                val cy = output[0][1][i]
+                val w = output[0][2][i]
+                val h = output[0][3][i]
+
+                detections.add(
+                    Detection(
+                        label = labels[bestClass],
+                        confidence = bestScore,
+                        bbox = BoundingBox(
+                            x = ((cx - w / 2f) / inputSize).coerceIn(0f, 1f),
+                            y = ((cy - h / 2f) / inputSize).coerceIn(0f, 1f),
+                            width = (w / inputSize).coerceIn(0f, 1f),
+                            height = (h / inputSize).coerceIn(0f, 1f)
+                        )
+                    )
+                )
+            }
+        }
+
+        return detections
+    }
     /**
      * Apply Non-Maximum Suppression (NMS)
      * 

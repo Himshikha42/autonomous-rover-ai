@@ -128,14 +128,9 @@ class InferenceSession @Inject constructor(
                 Logger.d(tag, "Image: ${processedImage.width}x${processedImage.height}")
             }
             
-            // Stub: Run actual inference
-            // In real implementation:
-            // val inputTensor = tokenizer.encode(processedPrompt)
-            // interpreter.run(inputTensor, outputTensor)
-            // val generatedText = tokenizer.decode(outputTensor)
-            
-            val generatedText = generateStubResponse(request)
-            val confidence = 0.85f // Stub: Will come from model
+            // Run actual inference via the loaded LLM
+            val generatedText = modelManager.generateResponse(processedPrompt)
+            val confidence = 1.0f
             
             val latency = System.currentTimeMillis() - startTime
             
@@ -208,26 +203,6 @@ class InferenceSession @Inject constructor(
             Bitmap.createScaledBitmap(image, targetSize, targetSize, true)
         } else {
             image
-        }
-    }
-    
-    /**
-     * Generate stub response for testing
-     */
-    private fun generateStubResponse(request: InferenceRequest): String {
-        return when {
-            request.image != null -> {
-                """{"clear":true,"obs":["stub_object"],"human":0,"act":"forward","emo":"curious"}"""
-            }
-            request.prompt.contains("battery", ignoreCase = true) -> {
-                "Battery status nominal."
-            }
-            request.prompt.contains("obstacle", ignoreCase = true) -> {
-                """{"clear":false,"obs":["wall"],"human":0,"act":"stop","emo":"cautious"}"""
-            }
-            else -> {
-                "Stub response. Model not loaded."
-            }
         }
     }
 }
