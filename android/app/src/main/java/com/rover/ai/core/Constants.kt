@@ -53,7 +53,7 @@ object Constants {
     // ============================================================================
     
     const val GEMMA_MODEL_NAME = "Gemma-3n-E2B-it"
-    const val GEMMA_MODEL_FILE = "gemma_3n_e2b_it.tflite"
+    const val GEMMA_MODEL_FILE = "gemma-3n-E2B-it-int4.litertlm"
     const val GEMMA_ACCELERATOR = "GPU"
     const val GEMMA_MAX_TOKENS = 128
     const val GEMMA_TOP_K = 16
@@ -67,7 +67,7 @@ object Constants {
     // YOLO DETECTOR
     // ============================================================================
     
-    const val YOLO_MODEL_FILE = "yolov8n.tflite"
+    const val YOLO_MODEL_FILE = "Yolo-v8-Detection.tflite"
     const val YOLO_DELEGATE = "GPU"
     const val YOLO_CONFIDENCE_THRESHOLD = 0.5f
     const val YOLO_TARGET_FPS = 12
@@ -78,7 +78,7 @@ object Constants {
     // DEPTH ESTIMATOR
     // ============================================================================
     
-    const val DEPTH_MODEL_FILE = "depth_anything_v2.tflite"
+    const val DEPTH_MODEL_FILE = "Depth-Anything-V2.tflite"
     const val DEPTH_DELEGATE = "GPU"
     const val DEPTH_INPUT_SIZE = 256
     

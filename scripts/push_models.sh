@@ -45,9 +45,9 @@ echo ""
 
 # Models to push
 MODELS=(
-    "gemma_3n_e2b_it.tflite"
-    "yolov8n.tflite"
-    "depth_anything_v2.tflite"
+    "gemma-3n-E2B-it-int4.litertlm"
+    "Yolo-v8-Detection.tflite"
+    "Depth-Anything-V2.tflite"
 )
 
 SUCCESS_COUNT=0

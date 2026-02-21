@@ -107,10 +107,10 @@ Build a fully autonomous rover using an **iQOO 13 smartphone** (Snapdragon 8 Eli
 
 ### Android Development
 - **Android Studio** Hedgehog (2023.1.1+)
-- **Kotlin** 1.9+
-- **Gradle** 8.2+
-- **Min SDK**: 26 (Android 8.0)
-- **Target SDK**: 34 (Android 14)
+- **Kotlin** 2.1+
+- **Gradle** 8.7+
+- **Min SDK**: 31 (Android 12)
+- **Target SDK**: 35 (Android 15)
 - **JDK**: 17
 
 ---
@@ -121,21 +121,22 @@ The AI models are **NOT** included in the APK due to their size. They must be si
 
 ### Required Models
 
-1. **Gemma 3n E2B-it** (~3.7GB)
+1. **Gemma 3n E2B-it int4** (~3.40GB)
    - Download from: [Google AI Edge](https://ai.google.dev/edge/litert/models/gemma)
-   - File: `gemma_3n_e2b_it.tflite`
+   - File: `gemma-3n-E2B-it-int4.litertlm`
+   - Format: LiteRT LLM (`.litertlm`) — loaded via `com.google.ai.edge.litertlm.LlmInference`
    - Purpose: LLM-based scene understanding and planning
 
-2. **YOLOv8 Nano** (~10MB)
+2. **YOLOv8 Detection** (~12.7MB)
    - Download from: [Ultralytics](https://github.com/ultralytics/ultralytics)
    - Convert to TFLite: `yolo export model=yolov8n.pt format=tflite`
-   - File: `yolov8n.tflite`
+   - File: `Yolo-v8-Detection.tflite`
    - Purpose: Real-time object detection
 
-3. **Depth Anything V2** (~20MB)
+3. **Depth Anything V2** (~94.3MB)
    - Download from: [Depth Anything](https://github.com/DepthAnything/Depth-Anything-V2)
    - Convert to TFLite (mobile variant)
-   - File: `depth_anything_v2.tflite`
+   - File: `Depth-Anything-V2.tflite`
    - Purpose: Monocular depth estimation
 
 ### Model Storage Location
@@ -143,9 +144,9 @@ The AI models are **NOT** included in the APK due to their size. They must be si
 Models must be placed in app-scoped storage (no permissions needed):
 ```
 /sdcard/Android/data/com.rover.ai/files/models/
-├── gemma_3n_e2b_it.tflite      # LLM model (~3.7GB)
-├── yolov8n.tflite               # Object detection (~10MB)
-└── depth_anything_v2.tflite     # Depth estimation (~20MB)
+├── gemma-3n-E2B-it-int4.litertlm   # LLM model (~3.40GB)
+├── Yolo-v8-Detection.tflite         # Object detection (~12.7MB)
+└── Depth-Anything-V2.tflite         # Depth estimation (~94.3MB)
 ```
 
 ### Push Models via ADB
@@ -170,9 +171,9 @@ push_models.bat C:\path\to\your\models\
 2. Push each model individually:
 
 ```bash
-adb push gemma_3n_e2b_it.tflite /sdcard/Android/data/com.rover.ai/files/models/
-adb push yolov8n.tflite /sdcard/Android/data/com.rover.ai/files/models/
-adb push depth_anything_v2.tflite /sdcard/Android/data/com.rover.ai/files/models/
+adb push gemma-3n-E2B-it-int4.litertlm /sdcard/Android/data/com.rover.ai/files/models/
+adb push Yolo-v8-Detection.tflite /sdcard/Android/data/com.rover.ai/files/models/
+adb push Depth-Anything-V2.tflite /sdcard/Android/data/com.rover.ai/files/models/
 ```
 
 3. Verify models are present:
