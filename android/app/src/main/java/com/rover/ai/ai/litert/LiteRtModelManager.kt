@@ -1,13 +1,22 @@
 package com.rover.ai.ai.litert
 
 import android.content.Context
-import com.google.ai.edge.litertlm.LlmInference
-import com.google.ai.edge.litertlm.LlmInferenceOptions
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.rover.ai.ai.model.ModelFileStatus
 import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.core.Constants
 import com.rover.ai.core.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,6 +88,21 @@ interface LiteRtModelManager {
      * @throws IllegalStateException if model is not loaded
      */
     suspend fun generateResponse(prompt: String): String
+
+    /**
+     * Generate a streaming text response from the loaded LLM
+     *
+     * @param prompt Input text prompt
+     * @param onPartialResult Called with each text chunk as it is generated
+     * @param onDone Called when generation is complete
+     * @param onError Called if an error occurs
+     */
+    fun generateResponseStreaming(
+        prompt: String,
+        onPartialResult: (String) -> Unit,
+        onDone: () -> Unit,
+        onError: (Throwable) -> Unit
+    )
 }
 
 /**
@@ -104,16 +128,17 @@ class LiteRtModelManagerImpl @Inject constructor(
     
     private var modelInfo: ModelInfo? = null
     
-    private var llmInference: LlmInference? = null
+    private var engine: Engine? = null
+    private var conversation: Conversation? = null
     
     /**
-     * Load model from external storage using LlmInference API
+     * Load model from external storage using Engine API
      * 
      * In production, this will:
      * 1. Check if model file exists in external storage
-     * 2. Build LlmInferenceOptions with model path, maxTokens, topK, temperature
-     * 3. Call LlmInference.createFromOptions(context, options) to initialise
-     * 4. Warm up with a dummy prompt if desired
+     * 2. Build EngineConfig with model path, backend, maxNumTokens
+     * 3. Create Engine(engineConfig) and call engine.initialize()
+     * 4. Create conversation via engine.createConversation(ConversationConfig(...))
      */
     override suspend fun loadModel(): Boolean = withContext(Dispatchers.IO) {
         Logger.d(tag, "Loading Gemma 3n model: ${Constants.GEMMA_MODEL_FILE}")
@@ -156,13 +181,24 @@ class LiteRtModelManagerImpl @Inject constructor(
             
             Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
             
-            val options = LlmInferenceOptions.builder()
-                .setModelPath(modelFile.absolutePath)
-                .setMaxTokens(Constants.GEMMA_MAX_TOKENS)
-                .setTopK(Constants.GEMMA_TOP_K.toInt())
-                .setTemperature(Constants.GEMMA_TEMPERATURE)
-                .build()
-            llmInference = LlmInference.createFromOptions(context, options)
+            val engineConfig = EngineConfig(
+                modelPath = modelFile.absolutePath,
+                backend = Backend.GPU,
+                maxNumTokens = Constants.GEMMA_MAX_TOKENS,
+            )
+            val eng = Engine(engineConfig)
+            eng.initialize()
+            val conv = eng.createConversation(
+                ConversationConfig(
+                    samplerConfig = SamplerConfig(
+                        topK = Constants.GEMMA_TOP_K.toInt(),
+                        topP = Constants.GEMMA_TOP_P.toDouble(),
+                        temperature = Constants.GEMMA_TEMPERATURE.toDouble(),
+                    ),
+                )
+            )
+            engine = eng
+            conversation = conv
             
             val loadTime = System.currentTimeMillis() - startTime
             
@@ -199,8 +235,10 @@ class LiteRtModelManagerImpl @Inject constructor(
         Logger.d(tag, "Unloading model")
         
         try {
-            llmInference?.close()
-            llmInference = null
+            conversation?.close()
+            conversation = null
+            engine?.close()
+            engine = null
             
             modelInfo = null
             _modelStatus.value = ModelStatus.UNLOADED
@@ -224,12 +262,60 @@ class LiteRtModelManagerImpl @Inject constructor(
      * Generate a text response from the loaded Gemma LLM
      */
     override suspend fun generateResponse(prompt: String): String = withContext(Dispatchers.IO) {
-        val inference = llmInference
+        val conv = conversation
             ?: throw IllegalStateException("Model not loaded")
         Logger.d(tag, "Generating response for prompt (${prompt.length} chars)")
         val startTime = System.currentTimeMillis()
-        val response = inference.generateResponse(prompt)
+        val result = CompletableDeferred<String>()
+        val sb = StringBuilder()
+        val contents = mutableListOf<Content>()
+        contents.add(Content.Text(prompt))
+        conv.sendMessageAsync(
+            Contents.of(contents),
+            object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    sb.append(message.toString())
+                }
+                override fun onDone() {
+                    result.complete(sb.toString())
+                }
+                override fun onError(throwable: Throwable) {
+                    result.completeExceptionally(throwable)
+                }
+            },
+        )
+        val response = result.await()
         Logger.perf(tag, "llm_inference", System.currentTimeMillis() - startTime)
         response
+    }
+
+    /**
+     * Generate a streaming text response from the loaded Gemma LLM
+     */
+    override fun generateResponseStreaming(
+        prompt: String,
+        onPartialResult: (String) -> Unit,
+        onDone: () -> Unit,
+        onError: (Throwable) -> Unit
+    ) {
+        val conv = conversation
+            ?: run { onError(IllegalStateException("Model not loaded")); return }
+        Logger.d(tag, "Streaming response for prompt (${prompt.length} chars)")
+        val contents = mutableListOf<Content>()
+        contents.add(Content.Text(prompt))
+        conv.sendMessageAsync(
+            Contents.of(contents),
+            object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    onPartialResult(message.toString())
+                }
+                override fun onDone() {
+                    onDone()
+                }
+                override fun onError(throwable: Throwable) {
+                    onError(throwable)
+                }
+            },
+        )
     }
 }
