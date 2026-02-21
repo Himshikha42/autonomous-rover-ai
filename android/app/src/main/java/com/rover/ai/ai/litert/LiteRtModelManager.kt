@@ -57,11 +57,19 @@ interface LiteRtModelManager {
     val modelStatus: StateFlow<ModelStatus>
     
     /**
-     * Load the Gemma 3n model from assets into memory
+     * Load the Gemma 3n model from assets into memory using GPU backend
      * 
      * @return true if successful, false otherwise
      */
     suspend fun loadModel(): Boolean
+
+    /**
+     * Load the Gemma 3n model with a specific backend (CPU or GPU)
+     *
+     * @param backend The backend to use for inference
+     * @return true if successful, false otherwise
+     */
+    suspend fun loadModelWithBackend(backend: Backend): Boolean
     
     /**
      * Unload the model from memory to free resources
@@ -132,20 +140,26 @@ class LiteRtModelManagerImpl @Inject constructor(
     private var conversation: Conversation? = null
     
     /**
-     * Load model from external storage using Engine API
+     * Load model from external storage using Engine API with GPU backend (default)
+     */
+    override suspend fun loadModel(): Boolean = loadModelWithBackend(Backend.GPU)
+
+    /**
+     * Load model from external storage using Engine API with the specified backend
      * 
      * In production, this will:
-     * 1. Check if model file exists in external storage
-     * 2. Build EngineConfig with model path, backend, maxNumTokens
-     * 3. Create Engine(engineConfig) and call engine.initialize()
-     * 4. Create conversation via engine.createConversation(ConversationConfig(...))
+     * 1. Unload any existing model first
+     * 2. Check if model file exists in external storage
+     * 3. Build EngineConfig with model path, backend, maxNumTokens
+     * 4. Create Engine(engineConfig) and call engine.initialize()
+     * 5. Create conversation via engine.createConversation(ConversationConfig(...))
      */
-    override suspend fun loadModel(): Boolean = withContext(Dispatchers.IO) {
-        Logger.d(tag, "Loading Gemma 3n model: ${Constants.GEMMA_MODEL_FILE}")
-        
+    override suspend fun loadModelWithBackend(backend: Backend): Boolean = withContext(Dispatchers.IO) {
+        Logger.d(tag, "Loading Gemma 3n model on ${backend}: ${Constants.GEMMA_MODEL_FILE}")
+
         if (_modelStatus.value == ModelStatus.LOADED) {
-            Logger.w(tag, "Model already loaded")
-            return@withContext true
+            Logger.i(tag, "Unloading existing model before reloading with ${backend}")
+            unloadModel()
         }
         
         // Check if model is available
@@ -179,11 +193,11 @@ class LiteRtModelManagerImpl @Inject constructor(
                 return@withContext false
             }
             
-            Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
+            Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB) on ${backend}")
             
             val engineConfig = EngineConfig(
                 modelPath = modelFile.absolutePath,
-                backend = Backend.GPU,
+                backend = backend,
                 maxNumTokens = Constants.GEMMA_MAX_TOKENS,
             )
             val eng = Engine(engineConfig)
@@ -201,18 +215,19 @@ class LiteRtModelManagerImpl @Inject constructor(
             conversation = conv
             
             val loadTime = System.currentTimeMillis() - startTime
+            val backendLabel = if (backend == Backend.GPU) "GPU" else "CPU"
             
             modelInfo = ModelInfo(
                 name = Constants.GEMMA_MODEL_NAME,
                 version = "1.0",
                 sizeBytes = modelFile.length(),
-                accelerator = Constants.GEMMA_ACCELERATOR,
+                accelerator = backendLabel,
                 loadTimeMs = loadTime
             )
             
             _modelStatus.value = ModelStatus.LOADED
             modelRegistry.updateModelStatus(Constants.GEMMA_MODEL_FILE, ModelFileStatus.LOADED)
-            Logger.i(tag, "Model loaded successfully in ${loadTime}ms")
+            Logger.i(tag, "Model loaded successfully on ${backendLabel} in ${loadTime}ms")
             
             true
         } catch (e: Exception) {

@@ -144,7 +144,7 @@ class YoloDetectorImpl @Inject constructor(
             modelRegistry.updateModelStatus(
                 Constants.YOLO_MODEL_FILE,
                 ModelFileStatus.MISSING,
-                "Model file not found. Please sideload via ADB."
+                "Model file not found. Re-export with: yolo export model=yolov8n.pt format=tflite, then push via ADB."
             )
             return@withContext false
         }

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rover.ai.ai.litert.InferenceSession
 import com.rover.ai.ai.litert.InferenceRequest
 import com.rover.ai.ai.litert.LiteRtModelManager
@@ -24,6 +25,7 @@ import com.rover.ai.ai.model.ModelRegistry
 import com.rover.ai.ai.vision.DepthEstimator
 import com.rover.ai.ai.vision.YoloDetector
 import com.rover.ai.core.Constants
+import com.google.ai.edge.litertlm.Backend
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -60,6 +62,7 @@ fun AITestScreen(
     // Per-model load times and error messages
     var gemmaLoadTimeMs by remember { mutableStateOf(0L) }
     var gemmaError by remember { mutableStateOf<String?>(null) }
+    var gemmaBackend by remember { mutableStateOf("GPU") }
     var yoloLoadTimeMs by remember { mutableStateOf(0L) }
     var yoloError by remember { mutableStateOf<String?>(null) }
     var depthLoadTimeMs by remember { mutableStateOf(0L) }
@@ -100,48 +103,130 @@ fun AITestScreen(
             modifier = Modifier.padding(8.dp)
         )
 
-        // Gemma card
-        ModelCard(
-            title = "🧠 Gemma LLM",
-            fileSize = formatSize(modelStates[Constants.GEMMA_MODEL_FILE]?.actualSizeBytes),
-            status = gemmaStatus,
-            loadTimeMs = gemmaLoadTimeMs,
-            errorMessage = gemmaError,
-            showGemmaHint = true,
-            onLoad = {
-                scope.launch {
-                    gemmaError = null
-                    gemmaLoadTimeMs = 0L
-                    val start = System.currentTimeMillis()
-                    appendResult("🧠 Loading Gemma (this may take 20-30s)…")
-                    val ok = modelManager.loadModel()
-                    gemmaLoadTimeMs = System.currentTimeMillis() - start
-                    if (ok) {
-                        appendResult("🧠 Gemma loaded in ${gemmaLoadTimeMs}ms")
-                    } else {
-                        gemmaError = "Load failed"
-                        appendResult("🧠 Gemma load failed")
+        // Gemma card - custom with CPU/GPU toggle
+        Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val gemmaStatusColor = when (gemmaStatus) {
+                    ModelStatus.LOADED -> ComposeColor(0xFF4CAF50)
+                    ModelStatus.LOADING -> ComposeColor(0xFF2196F3)
+                    ModelStatus.ERROR -> ComposeColor(0xFFF44336)
+                    ModelStatus.UNLOADED -> ComposeColor(0xFF9E9E9E)
+                }
+                val gemmaStatusLabel = when (gemmaStatus) {
+                    ModelStatus.LOADED -> "LOADED"
+                    ModelStatus.LOADING -> "LOADING"
+                    ModelStatus.ERROR -> "ERROR"
+                    ModelStatus.UNLOADED -> "FOUND"
+                }
+                // Title + status
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🧠 Gemma LLM", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (gemmaStatus == ModelStatus.LOADING) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Text(gemmaStatusLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = gemmaStatusColor)
                     }
                 }
-            },
-            onTest = {
-                scope.launch {
-                    appendResult("🧠 Testing Gemma LLM…")
-                    val start = System.currentTimeMillis()
-                    try {
-                        val result = inferenceSession.runInference(
-                            InferenceRequest(prompt = "Hello! Describe yourself in one sentence.")
-                        )
-                        val latency = System.currentTimeMillis() - start
-                        appendResult(
-                            "🧠 Gemma (${latency}ms, conf=${"%.2f".format(result.confidence)}):\n${result.text}"
-                        )
-                    } catch (e: Exception) {
-                        appendResult("🧠 Gemma ERROR: ${e.message}")
+                // File size + load time + backend info
+                val gemmaFileSize = formatSize(modelStates[Constants.GEMMA_MODEL_FILE]?.actualSizeBytes)
+                if (gemmaFileSize.isNotEmpty()) {
+                    Text(
+                        text = if (gemmaLoadTimeMs > 0) "Size: $gemmaFileSize | Loaded in ${gemmaLoadTimeMs}ms ($gemmaBackend)"
+                               else "Size: $gemmaFileSize",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Loading hint
+                if (gemmaStatus == ModelStatus.LOADING) {
+                    Text(
+                        "Loading… this takes 20-30 seconds for a 3.4GB model",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Error
+                if (gemmaError != null) {
+                    Text("Error: $gemmaError", style = MaterialTheme.typography.bodySmall, color = ComposeColor(0xFFF44336))
+                }
+                // THREE buttons row
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Load GPU button
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                gemmaBackend = "GPU"
+                                gemmaError = null
+                                gemmaLoadTimeMs = 0L
+                                appendResult("🧠 Loading Gemma on GPU (this may take 20-30s)…")
+                                val start = System.currentTimeMillis()
+                                val ok = modelManager.loadModelWithBackend(Backend.GPU)
+                                gemmaLoadTimeMs = System.currentTimeMillis() - start
+                                if (ok) appendResult("🧠 Gemma loaded on GPU in ${gemmaLoadTimeMs}ms")
+                                else { gemmaError = "GPU load failed"; appendResult("🧠 Gemma GPU load failed") }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = gemmaStatus != ModelStatus.LOADING,
+                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF4CAF50))
+                    ) { Text("GPU", fontSize = 12.sp) }
+                    // Load CPU button
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                gemmaBackend = "CPU"
+                                gemmaError = null
+                                gemmaLoadTimeMs = 0L
+                                appendResult("🧠 Loading Gemma on CPU…")
+                                val start = System.currentTimeMillis()
+                                val ok = modelManager.loadModelWithBackend(Backend.CPU)
+                                gemmaLoadTimeMs = System.currentTimeMillis() - start
+                                if (ok) appendResult("🧠 Gemma loaded on CPU in ${gemmaLoadTimeMs}ms")
+                                else { gemmaError = "CPU load failed"; appendResult("🧠 Gemma CPU load failed") }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = gemmaStatus != ModelStatus.LOADING,
+                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF2196F3))
+                    ) { Text("CPU", fontSize = 12.sp) }
+                    // Test button
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                appendResult("🧠 Testing Gemma LLM…")
+                                val start = System.currentTimeMillis()
+                                try {
+                                    val result = inferenceSession.runInference(
+                                        InferenceRequest(prompt = "Hello! Describe yourself in one sentence.")
+                                    )
+                                    val latency = System.currentTimeMillis() - start
+                                    appendResult(
+                                        "🧠 Gemma [$gemmaBackend] (${latency}ms, conf=${"%.2f".format(result.confidence)}):\n${result.text}"
+                                    )
+                                } catch (e: Exception) {
+                                    appendResult("🧠 Gemma ERROR: ${e.message}")
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = gemmaStatus == ModelStatus.LOADED
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("Test", fontSize = 12.sp)
                     }
                 }
             }
-        )
+        }
 
         // YOLO card
         ModelCard(
@@ -437,12 +522,22 @@ private fun ModelCard(
 }
 
 /**
- * Create a simple grey test bitmap (320x320) for offline testing.
+ * Create a test bitmap (320x320) with colored shapes for offline testing.
+ * Note: This synthetic bitmap will not trigger real YOLO detections; it is
+ * intended only as a basic smoke test to verify inference runs end-to-end.
  */
 private fun createTestBitmap(): Bitmap {
     val size = 320
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(Color.GRAY)
+    canvas.drawColor(Color.LTGRAY)
+    // Draw some colored rectangles to create visual features
+    val paint = android.graphics.Paint()
+    paint.color = Color.RED
+    canvas.drawRect(50f, 50f, 150f, 200f, paint)
+    paint.color = Color.BLUE
+    canvas.drawRect(180f, 80f, 280f, 250f, paint)
+    paint.color = Color.GREEN
+    canvas.drawRect(100f, 220f, 220f, 300f, paint)
     return bitmap
 }
