@@ -83,19 +83,19 @@ class ModelRegistry @Inject constructor(
         ModelMetadata(
             name = "Gemma 3n E2B-it",
             fileName = Constants.GEMMA_MODEL_FILE,
-            expectedSizeBytes = 3_700_000_000L, // ~3.7GB
+            expectedSizeBytes = 3_400_000_000L, // ~3.40GB
             sha256Checksum = null // Optional: Add checksum if available
         ),
         ModelMetadata(
             name = "YOLOv8 Nano",
             fileName = Constants.YOLO_MODEL_FILE,
-            expectedSizeBytes = 10_000_000L, // ~10MB
+            expectedSizeBytes = 12_700_000L, // ~12.7MB
             sha256Checksum = null
         ),
         ModelMetadata(
             name = "Depth Anything V2",
             fileName = Constants.DEPTH_MODEL_FILE,
-            expectedSizeBytes = 20_000_000L, // ~20MB
+            expectedSizeBytes = 94_300_000L, // ~94.3MB
             sha256Checksum = null
         )
     )

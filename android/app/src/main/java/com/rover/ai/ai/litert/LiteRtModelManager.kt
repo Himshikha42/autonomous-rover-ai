@@ -73,8 +73,10 @@ interface LiteRtModelManager {
 /**
  * Implementation of LiteRT model manager for Gemma 3n
  * 
- * Manages lifecycle of on-device LLM model using TensorFlow Lite / LiteRT APIs.
- * This is a stub implementation until actual TFLite model is integrated.
+ * Manages lifecycle of on-device LLM model using the Google LiteRT LLM
+ * (com.google.ai.edge.litertlm) library's LlmInference API.
+ * The YOLO and Depth models use the standard TFLite interpreter since they
+ * are .tflite format.
  * 
  * Thread-safe singleton managed by Hilt.
  */
@@ -91,18 +93,19 @@ class LiteRtModelManagerImpl @Inject constructor(
     
     private var modelInfo: ModelInfo? = null
     
-    // Stub: Will hold actual TFLite Interpreter when integrated
-    // private var interpreter: Interpreter? = null
+    // Holds the LlmInference instance for the Gemma .litertlm model
+    // import com.google.ai.edge.litertlm.LlmInference
+    // import com.google.ai.edge.litertlm.LlmInferenceOptions
+    // private var llmInference: LlmInference? = null
     
     /**
-     * Load model from external storage
+     * Load model from external storage using LlmInference API
      * 
      * In production, this will:
      * 1. Check if model file exists in external storage
-     * 2. Load .tflite file using memory-mapped file for large models
-     * 3. Configure GPU/NNAPI delegate
-     * 4. Initialize TFLite Interpreter
-     * 5. Warm up with dummy input
+     * 2. Build LlmInferenceOptions with model path, maxTokens, topK, temperature
+     * 3. Call LlmInference.createFromOptions(context, options) to initialise
+     * 4. Warm up with a dummy prompt if desired
      */
     override suspend fun loadModel(): Boolean = withContext(Dispatchers.IO) {
         Logger.d(tag, "Loading Gemma 3n model: ${Constants.GEMMA_MODEL_FILE}")
@@ -145,16 +148,14 @@ class LiteRtModelManagerImpl @Inject constructor(
             
             Logger.i(tag, "Loading model from: ${modelFile.absolutePath} (${modelFile.length() / 1_000_000}MB)")
             
-            // Stub: In real implementation:
-            // val modelBuffer = loadModelFileMemoryMapped(modelFile)
-            // val options = Interpreter.Options().apply {
-            //     when (Constants.GEMMA_ACCELERATOR) {
-            //         "GPU" -> addDelegate(GpuDelegate())
-            //         "NNAPI" -> addDelegate(NnApiDelegate())
-            //     }
-            //     setNumThreads(2)
-            // }
-            // interpreter = Interpreter(modelBuffer, options)
+            // Load .litertlm model using the LlmInference API:
+            // val options = LlmInferenceOptions.builder()
+            //     .setModelPath(modelFile.absolutePath)
+            //     .setMaxTokens(Constants.GEMMA_MAX_TOKENS)
+            //     .setTopK(Constants.GEMMA_TOP_K.toInt())
+            //     .setTemperature(Constants.GEMMA_TEMPERATURE)
+            //     .build()
+            // llmInference = LlmInference.createFromOptions(context, options)
             
             val loadTime = System.currentTimeMillis() - startTime
             
@@ -191,9 +192,8 @@ class LiteRtModelManagerImpl @Inject constructor(
         Logger.d(tag, "Unloading model")
         
         try {
-            // Stub: In real implementation:
-            // interpreter?.close()
-            // interpreter = null
+            // llmInference?.close()
+            // llmInference = null
             
             modelInfo = null
             _modelStatus.value = ModelStatus.UNLOADED

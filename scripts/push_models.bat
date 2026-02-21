@@ -53,7 +53,7 @@ echo + Directory created
 echo.
 
 REM Models to push
-set MODELS=gemma_3n_e2b_it.tflite yolov8n.tflite depth_anything_v2.tflite
+set MODELS=gemma-3n-E2B-it-int4.litertlm Yolo-v8-Detection.tflite Depth-Anything-V2.tflite
 
 set SUCCESS_COUNT=0
 set SKIP_COUNT=0
